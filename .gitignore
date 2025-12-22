@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+.vscode/
+.idea/
+coverage/
+*.tsbuildinfo
+
+# Build artifacts
+tw-auto-executor-deploy.tar.gz
+*.backup
+.cursor/
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env.*
+!.env.example
+!env.example
+!example.env

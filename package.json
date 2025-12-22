@@ -1,0 +1,37 @@
+{
+  "name": "tw-auto-executor",
+  "version": "1.0.0",
+  "description": "High-performance TradingView alert executor for VPS deployment",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["tradingview", "crypto", "trading", "fastify", "ccxt"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "fastify": "^4.28.1",
+    "fp-ts": "^2.16.9",
+    "ccxt": "^4.4.37",
+    "dotenv": "^16.4.5",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.3.0",
+    "io-ts": "^2.2.21",
+    "io-ts-types": "^0.5.16"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.9",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

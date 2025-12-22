@@ -1,0 +1,107 @@
+service: tw-auto-executor
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'prod'}
+  region: ${opt:region, 'ap-northeast-1'}
+  memorySize: 512
+  timeout: 30
+  
+  environment:
+    NODE_ENV: ${self:provider.stage}
+    LOG_LEVEL: info
+    BINANCE_API_KEY: ${ssm:/tw-executor/${self:provider.stage}/binance-api-key~true}
+    BINANCE_API_SECRET: ${ssm:/tw-executor/${self:provider.stage}/binance-api-secret~true}
+    BYBIT_API_KEY: ${ssm:/tw-executor/${self:provider.stage}/bybit-api-key~true}
+    BYBIT_API_SECRET: ${ssm:/tw-executor/${self:provider.stage}/bybit-api-secret~true}
+    TELEGRAM_BOT_TOKEN: ${ssm:/tw-executor/${self:provider.stage}/telegram-bot-token~true}
+    TELEGRAM_CHAT_ID: ${ssm:/tw-executor/${self:provider.stage}/telegram-chat-id~true}
+    WEBHOOK_PASSPHRASE: ${ssm:/tw-executor/${self:provider.stage}/webhook-passphrase~true}
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource:
+            - arn:aws:ssm:${self:provider.region}:*:parameter/tw-executor/${self:provider.stage}/*
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource:
+            - arn:aws:logs:${self:provider.region}:*:log-group:/aws/lambda/tw-auto-executor-*:*
+
+  tags:
+    Service: tw-auto-executor
+    Stage: ${self:provider.stage}
+    ManagedBy: serverless
+
+functions:
+  webhookHandler:
+    handler: dist/handler.handler
+    description: TradingView webhook handler for automatic trade execution
+    events:
+      - httpApi:
+          path: /webhook
+          method: post
+
+  healthCheck:
+    handler: dist/handler.healthCheck
+    description: Health check endpoint for monitoring
+    events:
+      - httpApi:
+          path: /health
+          method: get
+
+plugins:
+  - serverless-plugin-typescript
+  - serverless-offline
+
+custom:
+  serverless-offline:
+    httpPort: 3000
+
+package:
+  individually: true
+  patterns:
+    - '!.git/**'
+    - '!.vscode/**'
+    - '!node_modules/aws-sdk/**'
+    - '!**/*.test.ts'
+    - '!**/*.spec.ts'
+    - '!coverage/**'
+    - '!.eslintrc.json'
+    - '!.prettierrc.json'
+    - '!tsconfig.json'
+
+resources:
+  Resources:
+    WebhookHandlerLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-webhookHandler
+        RetentionInDays: 7
+    
+    HealthCheckLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-healthCheck
+        RetentionInDays: 3
+
+  Outputs:
+    WebhookUrl:
+      Description: TradingView Webhook URL
+      Value:
+        Fn::Sub: https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/webhook
+    
+    HealthCheckUrl:
+      Description: Health Check URL
+      Value:
+        Fn::Sub: https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/health

@@ -1,0 +1,47 @@
+# Project: TW Auto Executor
+
+## Tech Stack
+- TypeScript 5.9 (строгая типизация)
+- Node.js 20.x runtime
+- fp-ts 2.16 (функциональное программирование)
+- CCXT 4.2 (интеграция с биржами)
+- AWS Lambda + API Gateway
+- Serverless Framework 3.x
+
+## Code Style
+- Всегда использовать строгие типы (no `any`)
+- Функциональное программирование (fp-ts монады: `Either`, `TaskEither`)
+- Композиция через `pipe()`
+- Immutable data structures (readonly)
+- Branded types для domain models
+
+## Architecture
+- Clean Architecture + FP
+- Слои: types → domain → infrastructure → application → handler
+- Все ошибки через `DomainError` union type
+- Асинхронные операции через `TaskEither`
+
+## Naming Conventions
+- Files: kebab-case (`trade-signal.types.ts`)
+- Interfaces: PascalCase с префиксом `I` для services (`IExchangeService`)
+- Types: PascalCase (`TradeSignal`, `DomainError`)
+- Functions: camelCase (`validateTradeSignal`)
+- Constants: UPPER_SNAKE_CASE
+
+## Import Order
+1. External libraries (fp-ts, ccxt)
+2. Types
+3. Domain services
+4. Infrastructure services
+5. Application services
+
+## Error Handling
+- Всегда использовать `Either` или `TaskEither`
+- Никогда не throw exceptions
+- Маппить все внешние ошибки в `DomainError`
+
+## Comments
+- Документировать публичные интерфейсы
+- Объяснять сложную бизнес-логику
+- Избегать очевидных комментариев
+

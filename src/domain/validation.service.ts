@@ -6,7 +6,7 @@ import { pipe } from 'fp-ts/function';
 import { PathReporter } from 'io-ts/PathReporter';
 
 import type { TradeSignal } from '../types/trade-signal.types';
-import { TradeSignalCodec } from '../types/trade-signal.types';
+import { TradeSignalWithVolumeCodec } from '../types/trade-signal.types';
 import type { DomainError } from '../types/domain-error.types';
 import { validationError, authenticationError } from '../types/domain-error.types';
 
@@ -15,7 +15,7 @@ import { validationError, authenticationError } from '../types/domain-error.type
  */
 export const validateSignalStructure = (payload: unknown): E.Either<DomainError, TradeSignal> =>
   pipe(
-    TradeSignalCodec.decode(payload),
+    TradeSignalWithVolumeCodec.decode(payload),
     E.mapLeft((errors) =>
       validationError(
         `Invalid signal structure: ${PathReporter.report(E.left(errors)).join(', ')}`

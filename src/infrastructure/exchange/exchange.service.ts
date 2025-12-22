@@ -114,6 +114,29 @@ const setLeverage = (
   );
 
 /**
+ * Рассчитывает объем в базовой валюте с учетом volumeUSDT
+ * Если volumeUSDT указан, он имеет приоритет над volume
+ */
+const calculateVolume = (
+  exchange: ccxt.Exchange,
+  signal: TradeSignal,
+  priceForCalculation: number
+): number => {
+  // Приоритет у volumeUSDT
+  if (signal.volumeUSDT !== undefined) {
+    const calculatedVolume = signal.volumeUSDT / priceForCalculation;
+    return parseFloat(exchange.amountToPrecision(signal.symbol, calculatedVolume));
+  }
+  
+  // Используем volume, если volumeUSDT не указан
+  if (signal.volume !== undefined) {
+    return parseFloat(exchange.amountToPrecision(signal.symbol, signal.volume));
+  }
+  
+  throw new Error('Neither volume nor volumeUSDT specified');
+};
+
+/**
  * Исполняет market order (spot или futures)
  */
 const executeMarketOrder = (
@@ -130,10 +153,25 @@ const executeMarketOrder = (
     TE.chain<DomainError, undefined, OrderResult>(() =>
       TE.tryCatch(
         async () => {
+          // Если указан volumeUSDT, получаем текущую цену
+          let volume: number;
+          if (signal.volumeUSDT !== undefined) {
+            const ticker = await exchange.fetchTicker(signal.symbol);
+            const currentPrice = ticker.last ?? ticker.close;
+            
+            if (!currentPrice) {
+              throw new Error('Could not determine current price for volumeUSDT calculation');
+            }
+            
+            volume = calculateVolume(exchange, signal, currentPrice);
+          } else {
+            volume = calculateVolume(exchange, signal, 1); // volume уже задан
+          }
+
           const order = await exchange.createMarketOrder(
             signal.symbol,
             signal.action,
-            signal.volume
+            volume
           );
 
           return {
@@ -141,7 +179,7 @@ const executeMarketOrder = (
             exchange: exchangeId,
             symbol: signal.symbol,
             action: signal.action,
-            volume: signal.volume,
+            volume: volume,
             orderType: 'market' as OrderType,
             price: order.average ?? null,
             executedAt: new Date(),
@@ -191,13 +229,17 @@ const executeLimitOrder = (
             throw new Error('Could not determine current price');
           }
 
+          // Рассчитываем цену лимитного ордера
           const offset = signal.action === 'buy' ? 0.999 : 1.001;
           const limitPrice = currentPrice * offset;
+
+          // Рассчитываем объем с учетом лимитной цены
+          const volume = calculateVolume(exchange, signal, limitPrice);
 
           const order = await exchange.createLimitOrder(
             signal.symbol,
             signal.action,
-            signal.volume,
+            volume,
             limitPrice
           );
 
@@ -206,7 +248,7 @@ const executeLimitOrder = (
             exchange: exchangeId,
             symbol: signal.symbol,
             action: signal.action,
-            volume: signal.volume,
+            volume: volume,
             orderType: 'limit' as OrderType,
             price: limitPrice,
             executedAt: new Date(),

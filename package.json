@@ -1,6 +1,6 @@
 {
   "name": "tw-auto-executor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "High-performance TradingView alert executor for VPS deployment",
   "main": "dist/index.js",
   "scripts": {

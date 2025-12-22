@@ -2,6 +2,7 @@
  * Domain types для торговых сигналов TradingView
  */
 import * as t from 'io-ts';
+import * as E from 'fp-ts/Either';
 
 // ============= Branded Types =============
 
@@ -167,17 +168,53 @@ export const TradeSignalCodec = t.intersection([
     exchange: ExchangeIdCodec,
     symbol: TradingSymbolCodec,
     action: TradeActionCodec,
-    volume: VolumeCodec,
     orderType: OrderTypeCodec,
     passphrase: PassphraseCodec,
   }),
   t.partial({
-    marketType: MarketTypeCodec,      // spot или futures (auto-detect если не указано)
+    volume: VolumeCodec,               // объем в монетах (опциональный)
+    volumeUSDT: t.number,              // объем в USDT (опциональный)
+    marketType: MarketTypeCodec,       // spot или futures (auto-detect если не указано)
     direction: DirectionCodec,         // long или short (для futures)
     leverage: t.number,                // кредитное плечо (для futures)
     reduceOnly: t.boolean,             // только закрытие позиции (для futures)
   }),
 ]);
+
+/**
+ * Рефайнмент: должен быть указан либо volume, либо volumeUSDT
+ * volumeUSDT имеет приоритет над volume
+ */
+export const TradeSignalWithVolumeCodec = new t.Type<TradeSignal, TradeSignal, unknown>(
+  'TradeSignalWithVolume',
+  (input): input is TradeSignal => {
+    if (!TradeSignalCodec.is(input)) return false;
+    return !!(input.volume || input.volumeUSDT);
+  },
+  (input, context) => {
+    const baseValidation = TradeSignalCodec.decode(input);
+    if (E.isLeft(baseValidation)) {
+      return baseValidation;
+    }
+    const signal = baseValidation.right;
+    if (!signal.volume && !signal.volumeUSDT) {
+      return t.failure(
+        input,
+        context,
+        'Either volume or volumeUSDT must be specified'
+      );
+    }
+    if (signal.volumeUSDT !== undefined && signal.volumeUSDT <= 0) {
+      return t.failure(
+        input,
+        context,
+        'volumeUSDT must be positive'
+      );
+    }
+    return t.success(signal);
+  },
+  t.identity
+);
 
 // ============= Static Types =============
 
@@ -196,7 +233,7 @@ export interface OrderResult {
   readonly exchange: ExchangeIdType;
   readonly symbol: TradingSymbol;
   readonly action: TradeAction;
-  readonly volume: Volume;
+  readonly volume: number;  // Фактический объем исполнения
   readonly orderType: OrderType;
   readonly price: number | null;
   readonly executedAt: Date;

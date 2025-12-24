@@ -114,6 +114,95 @@ const setLeverage = (
   );
 
 /**
+ * Создает стоп-лосс ордер после успешного входа в позицию
+ */
+const createStopLossOrder = (
+  exchange: ccxt.Exchange,
+  exchangeId: ExchangeIdType,
+  result: OrderResult,
+  stopLossOffset: number
+): TE.TaskEither<DomainError, undefined> => {
+  // Если стоп-лосс отключен (offset = 0) или цена не определена - пропускаем
+  if (stopLossOffset === 0 || !result.price) {
+    return TE.right(undefined);
+  }
+
+  return pipe(
+    TE.tryCatch(
+      async (): Promise<undefined> => {
+        const entryPrice = result.price;
+        
+        // Проверка что цена определена
+        if (entryPrice === null) {
+          throw new Error('Entry price is null, cannot set stop-loss');
+        }
+        
+        // Определяем направление позиции
+        // Для spot: buy = long, sell = short
+        // Для futures: используем поле direction если есть
+        const isLongPosition = result.direction === 'long' || 
+                               (!result.direction && result.action === 'buy');
+        
+        // Рассчитываем цену стоп-лосса
+        // Long: стоп ниже цены входа
+        // Short: стоп выше цены входа
+        const stopPrice = isLongPosition
+          ? entryPrice * (1 - stopLossOffset)
+          : entryPrice * (1 + stopLossOffset);
+        
+        // Обратное действие для стопа (если купили - продаем, если продали - покупаем)
+        const stopAction = result.action === 'buy' ? 'sell' : 'buy';
+        
+        // Создаем стоп-ордер
+        // Используем createOrder с типом 'stop' или 'stop_market' в зависимости от биржи
+        if (exchange.has['createStopOrder']) {
+          await exchange.createOrder(
+            result.symbol,
+            'stop',
+            stopAction,
+            result.volume,
+            undefined,
+            {
+              stopPrice: stopPrice,
+              reduceOnly: true, // Только для закрытия позиции
+            }
+          );
+        } else if (exchange.has['createOrder']) {
+          // Fallback: пробуем создать через обычный createOrder с параметрами стопа
+          await exchange.createOrder(
+            result.symbol,
+            'stop_market',
+            stopAction,
+            result.volume,
+            undefined,
+            {
+              stopPrice: stopPrice,
+              reduceOnly: true,
+            }
+          );
+        }
+        
+        return undefined;
+      },
+      (error) => {
+        // Ошибки стоп-лосса не должны прерывать основной поток
+        // Логируем, но возвращаем успех
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`Failed to set stop-loss for ${result.symbol}: ${errorMessage}`);
+        return exchangeError(
+          exchangeId,
+          `Stop-loss order failed (non-critical): ${errorMessage}`,
+          undefined,
+          error
+        );
+      }
+    ),
+    // Игнорируем ошибки стоп-лосса - они не критичны
+    TE.orElse(() => TE.right(undefined))
+  );
+};
+
+/**
  * Рассчитывает объем в базовой валюте с учетом volumeUSDT
  * Если volumeUSDT указан, он имеет приоритет над volume
  */
@@ -142,7 +231,8 @@ const calculateVolume = (
 const executeMarketOrder = (
   exchange: ccxt.Exchange,
   exchangeId: ExchangeIdType,
-  signal: TradeSignal
+  signal: TradeSignal,
+  config: ExchangeConfig
 ): TE.TaskEither<DomainError, OrderResult> => {
   const leverageTask: TE.TaskEither<DomainError, undefined> = signal.leverage
     ? setLeverage(exchange, exchangeId, signal.symbol, signal.leverage)
@@ -201,6 +291,10 @@ const executeMarketOrder = (
           );
         }
       )
+    ),
+    // Автоматически выставляем стоп-лосс после успешного исполнения
+    TE.chainFirst((result) => 
+      createStopLossOrder(exchange, exchangeId, result, config.stopLossOffset)
     )
   );
 };
@@ -211,7 +305,8 @@ const executeMarketOrder = (
 const executeLimitOrder = (
   exchange: ccxt.Exchange,
   exchangeId: ExchangeIdType,
-  signal: TradeSignal
+  signal: TradeSignal,
+  config: ExchangeConfig
 ): TE.TaskEither<DomainError, OrderResult> => {
   const leverageTask: TE.TaskEither<DomainError, undefined> = signal.leverage
     ? setLeverage(exchange, exchangeId, signal.symbol, signal.leverage)
@@ -229,9 +324,11 @@ const executeLimitOrder = (
             throw new Error('Could not determine current price');
           }
 
-          // Рассчитываем цену лимитного ордера
-          const offset = signal.action === 'buy' ? 0.999 : 1.001;
-          const limitPrice = currentPrice * offset;
+          // Рассчитываем цену лимитного ордера с использованием коэффициента из конфига
+          const priceMultiplier = signal.action === 'buy' 
+            ? (1 - config.limitOrderOffset) 
+            : (1 + config.limitOrderOffset);
+          const limitPrice = currentPrice * priceMultiplier;
 
           // Рассчитываем объем с учетом лимитной цены
           const volume = calculateVolume(exchange, signal, limitPrice);
@@ -270,6 +367,10 @@ const executeLimitOrder = (
           );
         }
       )
+    ),
+    // Автоматически выставляем стоп-лосс после успешного исполнения
+    TE.chainFirst((result) => 
+      createStopLossOrder(exchange, exchangeId, result, config.stopLossOffset)
     )
   );
 };
@@ -286,8 +387,8 @@ export const createExchangeService = (config: ExchangeConfig): IExchangeService 
       createExchangeInstance(signal.exchange, config, ccxtMarketType),
       TE.chain((exchange) =>
         signal.orderType === 'market'
-          ? executeMarketOrder(exchange, signal.exchange, { ...signal, marketType: detectedType })
-          : executeLimitOrder(exchange, signal.exchange, { ...signal, marketType: detectedType })
+          ? executeMarketOrder(exchange, signal.exchange, { ...signal, marketType: detectedType }, config)
+          : executeLimitOrder(exchange, signal.exchange, { ...signal, marketType: detectedType }, config)
       )
     );
   },

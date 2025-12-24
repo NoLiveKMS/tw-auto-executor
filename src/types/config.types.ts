@@ -28,6 +28,8 @@ export interface ExchangeConfig {
   readonly defaultSlippage: number;
   readonly maxRetryAttempts: number;
   readonly orderTimeoutMs: number;
+  readonly stopLossOffset: number;
+  readonly limitOrderOffset: number;
 }
 
 /**

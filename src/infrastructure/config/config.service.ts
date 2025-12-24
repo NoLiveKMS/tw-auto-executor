@@ -97,6 +97,8 @@ export const loadConfig = (): E.Either<DomainError, AppConfig> =>
           defaultSlippage: parseNumber(getOptionalEnv('DEFAULT_SLIPPAGE', '0.001'), 0.001),
           maxRetryAttempts: parseNumber(getOptionalEnv('MAX_RETRY_ATTEMPTS', '3'), 3),
           orderTimeoutMs: parseNumber(getOptionalEnv('ORDER_TIMEOUT_MS', '30000'), 30000),
+          stopLossOffset: parseNumber(getOptionalEnv('STOP_LOSS_OFFSET', '0'), 0),
+          limitOrderOffset: parseNumber(getOptionalEnv('LIMIT_ORDER_OFFSET', '0.001'), 0.001),
         },
         telegram: {
           botToken: getOptionalEnv('TELEGRAM_BOT_TOKEN', ''),

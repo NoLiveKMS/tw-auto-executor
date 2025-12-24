@@ -14,7 +14,7 @@ import { formatDomainError } from '../types/domain-error.types';
 export const webhookSchema = {
   body: {
     type: 'object',
-    required: ['exchange', 'symbol', 'action', 'orderType', 'passphrase'],
+    required: ['exchange', 'symbol', 'action', 'volume', 'orderType', 'passphrase'],
     properties: {
       exchange: {
         type: 'string',
@@ -30,10 +30,6 @@ export const webhookSchema = {
         enum: ['buy', 'sell'],
       },
       volume: {
-        type: 'number',
-        exclusiveMinimum: 0,
-      },
-      volumeUSDT: {
         type: 'number',
         exclusiveMinimum: 0,
       },
@@ -63,11 +59,6 @@ export const webhookSchema = {
         type: 'boolean',
       },
     },
-    // Кастомная валидация: должен быть указан хотя бы один из volume или volumeUSDT
-    oneOf: [
-      { required: ['volume'] },
-      { required: ['volumeUSDT'] },
-    ],
   },
   response: {
     200: {
@@ -113,7 +104,7 @@ export const createWebhookHandler = (tradeExecutor: ITradeExecutorService) =>
     const result = await tradeExecutor.execute(payload)();
 
     // Обрабатываем результат
-    pipe(
+    return pipe(
       result,
       E.match(
         // Left - ошибка
